@@ -1,10 +1,5 @@
 import os
-import platform
 from abc import ABCMeta, abstractmethod, abstractproperty, abstractstaticmethod
-
-import openai
-import chromadb
-import langchain
 
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -16,13 +11,7 @@ from langchain.prompts import PromptTemplate
 from langchain.callbacks import get_openai_callback
 from secret import OPENAI_API_KEY
 
-from recipe import qa_document
-
-
-filepath = "../asset/lecture.pdf"
-out_dir = "../out"
-out_filename = f"{out_dir}/summary_02.md"
-
+from recipe import qa_document, qa_general
 
 class Summarizer(metaclass=ABCMeta):
     def __init__(self, model_name: str, max_tokens: int = None) -> None:
@@ -82,27 +71,13 @@ class IRSummarizer(Summarizer):
     def __init__(self, model_name: str, max_tokens: int = None) -> None:
         super().__init__(model_name, max_tokens)
         
-    def run(self, chain_type: str = "stuff"):
-        self.pages = self.loader.load_and_split()
+    
+    def _run_get_header(self, chain_type: str = "stuff"):
+        
         self.texts = self.splitter.split_documents([self.pages[0]])
-        self.embeddings = OpenAIEmbeddings()
         self.vectordb = Chroma.from_documents(self.texts, self.embeddings)
         
-        qa = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type=chain_type,
-            retriever=self.vectordb.as_retriever(),
-        )
-
-        self._answer = ""
-        self._api_cost = []
-        
-        prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-        {context}
-
-        Question: {question}
-        Answer:"""
+        prompt_template = qa_general.general
         
         qa_prompt = PromptTemplate(
             template=prompt_template, input_variables=["context", "question"]
@@ -115,14 +90,36 @@ class IRSummarizer(Summarizer):
 
         with get_openai_callback() as cb:
             
-            self._answer = qa_chain.run({"context": self.pages[0], "question": qa_document.ir_header})
-            self._answer += "\n\n"
-            self._cb = cb
+            self._ir_header = qa_chain.run({"context": self.pages[0], "question": qa_document.ir_header})
+            self._answer += self._ir_header + "\n\n"
             self._api_cost = {"total_tokens": cb.total_tokens, "prompt_tokens": cb.prompt_tokens, "completion_tokens": cb.completion_tokens, "total_cost(USD)": cb.total_cost}
 
-            print(self._answer)
+            print(self._ir_header)
             
-        self.texts = self.splitter.split_documents(self.pages[1:])
+    def _run_get_ir_year(self, chain_type: str = "stuff"):
+        
+        prompt_template = qa_general.general
+        
+        qa_prompt = PromptTemplate(
+            template=prompt_template, input_variables=["context", "question"]
+        )
+        
+        qa_chain = LLMChain(
+            llm=self.llm,
+            prompt=qa_prompt
+        )
+
+        with get_openai_callback() as cb:
+            
+            self._ir_year = qa_chain.run({"context": self._answer, "question": qa_document.ir_get_year})
+            api_cost = {"total_tokens": cb.total_tokens, "prompt_tokens": cb.prompt_tokens, "completion_tokens": cb.completion_tokens, "total_cost(USD)": cb.total_cost}
+            self._api_cost = {k: self._api_cost.get(k, 0) + api_cost.get(k, 0) for k in set(self._api_cost) & set(api_cost)}
+
+            print(self._ir_year)
+            
+    def _run_get_summary(self, chain_type):
+        
+        self.texts = self.splitter.split_documents(self.pages[1:13])
         self.vectordb = Chroma.from_documents(self.texts, self.embeddings)
         
         qa = RetrievalQA.from_chain_type(
@@ -133,9 +130,45 @@ class IRSummarizer(Summarizer):
         
         with get_openai_callback() as cb:
             
-            self._answer += qa.run(qa_document.ir_content)
+            query_ir_content = qa_document.ir_content.format(year=self._ir_year)
+            self._ir_summary = qa.run(query_ir_content)
+            self._answer += self._ir_summary + "\n\n"
             api_cost = {"total_tokens": cb.total_tokens, "prompt_tokens": cb.prompt_tokens, "completion_tokens": cb.completion_tokens, "total_cost(USD)": cb.total_cost}
             self._api_cost = {k: self._api_cost.get(k, 0) + api_cost.get(k, 0) for k in set(self._api_cost) & set(api_cost)}
+            
+            print(self._answer)
+            
+    def _run_get_judge(self, chain_type: str = "stuff"):
+                
+        qa_prompt = PromptTemplate(
+            template=qa_document.ir_judge_invest, input_variables=["performance"]
+        )
+        
+        qa_chain = LLMChain(
+            llm=self.llm,
+            prompt=qa_prompt
+        )
+
+        with get_openai_callback() as cb:
+            
+            self._ir_judgement = qa_chain.run({"performance": self._ir_summary})
+            self._answer += self._ir_judgement
+            api_cost = {"total_tokens": cb.total_tokens, "prompt_tokens": cb.prompt_tokens, "completion_tokens": cb.completion_tokens, "total_cost(USD)": cb.total_cost}
+            self._api_cost = {k: self._api_cost.get(k, 0) + api_cost.get(k, 0) for k in set(self._api_cost) & set(api_cost)}
+
+            print(self._ir_judgement)
+        
+    def run(self, chain_type: str = "stuff"):
+        self.pages = self.loader.load_and_split()
+        self.embeddings = OpenAIEmbeddings()
+        
+        self._answer = ""
+        self._api_cost = []
+        
+        self._run_get_header(chain_type)
+        self._run_get_ir_year(chain_type)
+        self._run_get_summary(chain_type)
+        self._run_get_judge(chain_type)
                     
         self.api_cost = [
                 f"Total Tokens: {self._api_cost['total_tokens']}\n",
@@ -144,10 +177,10 @@ class IRSummarizer(Summarizer):
                 f"Total Cost (USD): ${self._api_cost['total_cost(USD)']}\n\n",
             ]
         
-        return self._cb
+        return self._answer
     
 if __name__ == "__main__":
     summarizer = IRSummarizer("gpt-3.5-turbo", 1800)
-    summarizer.load_document("../asset/ir_japanhospicehld.pdf")
+    summarizer.load_document("../asset/ir_dena.pdf")
     summarizer.run()
-    summarizer.out("../out/ir_japanhospicehld_summary_03.md")
+    summarizer.out("../out/ir_dena_english_01.md")

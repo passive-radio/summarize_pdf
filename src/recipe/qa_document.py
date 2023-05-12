@@ -1,40 +1,72 @@
-ir_content = """与えられた企業の2022年度の業績に関する文章を以下のフォーマットに必ず従い日本語で出力して下さい。```
-# 要約
-業績・予想・計画に関する発表の要約
+ir_content = """Please output the following in English, adhering strictly to the format below, about the performance of the given company in the year {year}.
 
-# 結果 (2022年度の売上高、営業利益、経常利益、販管費などの数値と過去との比較)
-    (最小5個、最大10個)
-    1. ハイライト1
-    2. 
-    3. 
-    
+format```
+# Summary
+A summary of announcements about performance, forecasts, and plans
 
-# 今後の業績見通し (企業の将来の売上・利益に関わる事実・兆し)
-    (最小4個、最大6個)
-    1. 見通し1
-    2. 
-    3. 
+# Results ({year} Sales, operating profit, ordinary income, selling, general and administrative expenses, etc. compared with the past)
+(Minimum 5, maximum 10)
+1. a quantitative performance (eg. sales)
+2. 
+3. 
 
-# 分類キーワード
-    (最小3個、最大4個)
-    1. キーワード1
-    2. 
-    3. 
+# Future performance outlook (Facts and signs related to the company's future sales and profits)
+(Minimum 4, maximum 6)
+1. Outlook 1
+2. 
+3. 
+
+# Classification keywords
+(Minimum 3, maximum 4)
+1. Keyword 1
+2. 
+3. 
 ```"""
 
-ir_header = """与えられた文章は実在する企業の業績レポートの表紙です。出力フォーマットに必ず従い日本語で出力して下さい。ただし以下の制約を必ず守って出力すること。
+ir_get_year = """"The given markdown text is the beginning of a document about a company's performance. Please output the value of 'Fiscal year of the announcement' in accordance with the following format.
 
-制約```
-1. 西暦が3桁や5桁になる場合、正しい年を推定して4桁で出力する
-2. 年を修正するだけで他の情報を改変しない
-3. "# 概要" も必ず出力する
+Output format```
+Year (e.g., 1999, 2023)
+```"""
+
+ir_header = """The given text is the cover of an existing company's performance report. Please output in English according to the output format. However, please be sure to follow the following constraints when outputting.
+
+Constraints```
+1. If the year is in 3 digits or 5 digits, estimate the correct year and output in 4 digits.
+2. Only adjust the year, don't change any other information.
+3. Be sure to include "# Summary" in the output.
 ```
 
-出力フォーマット```
-# 概要
-1. 企業名
-2. 発表を行った会計年度 (eg. "2025年度第2四半期", "2025年3月期通期")
-3. 発表日
+Output format```
+# Summary
+1. Company name: Name
+2. Fiscal year of the announcement: Year (eg. "2nd quarter of fiscal 2025", "Full year of March 2025")
+3. Announcement date: Year/Month/Day
+```"""
+
+ir_judge_invest = """You are a professional long-term equity investor. Based on your past investment experience and knowledge, please estimate whether or not you should buy the stock of a company with the final performance. However, please output in English adhering to the following constraints.
+
+Constraints ```
+1. Make your decision based on the quantitative and qualitative data of the given performance 'results' and 'outlook'.
+2. The judgement format is "positive" or "negative".
+3. If the performance has been consistently improving and is likely to continue to improve, judge it as positive, otherwise judge it as negative.
+4. Output the reason why you made such a judgment in bullet points.
+
+Performance```
+{performance}
+```
+
+Output format```
+# The judgement
+"positive" or "negative"
+
+# The reason of your judgement
+(Minimum 5, maximum 7)
+1. 
+2. 
+3. 
+4. 
+5.
 ```"""
 
 biology_lecture = """与えられた生物学に関する講義のレジュメを要約し以下のフォーマットを必ず守り日本語で出力してください。```
