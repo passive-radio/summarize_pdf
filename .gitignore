@@ -178,3 +178,5 @@ index/
 index
 out
 out/
+.chroma
+.chroma/
